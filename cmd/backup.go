@@ -17,8 +17,8 @@ import (
 	log "gopkg.in/clog.v1"
 	"gopkg.in/ini.v1"
 
-	"github.com/gogits/gogs/models"
-	"github.com/gogits/gogs/modules/setting"
+	"github.com/gogs/gogs/models"
+	"github.com/gogs/gogs/pkg/setting"
 )
 
 var Backup = cli.Command{
@@ -33,11 +33,13 @@ portable among all supported database engines.`,
 		boolFlag("verbose, v", "Show process details"),
 		stringFlag("tempdir, t", os.TempDir(), "Temporary directory path"),
 		stringFlag("target", "./", "Target directory path to save backup archive"),
+		stringFlag("archive-name", fmt.Sprintf("gogs-backup-%s.zip", time.Now().Format("20060102150405")), "Name of backup archive"),
 		boolFlag("database-only", "Only dump database"),
 		boolFlag("exclude-repos", "Exclude repositories"),
 	},
 }
 
+const _CURRENT_BACKUP_FORMAT_VERSION = 1
 const _ARCHIVE_ROOT_DIR = "gogs-backup"
 
 func runBackup(c *cli.Context) error {
@@ -62,14 +64,14 @@ func runBackup(c *cli.Context) error {
 	// Metadata
 	metaFile := path.Join(rootDir, "metadata.ini")
 	metadata := ini.Empty()
-	metadata.Section("").Key("VERSION").SetValue("1")
+	metadata.Section("").Key("VERSION").SetValue(com.ToStr(_CURRENT_BACKUP_FORMAT_VERSION))
 	metadata.Section("").Key("DATE_TIME").SetValue(time.Now().String())
 	metadata.Section("").Key("GOGS_VERSION").SetValue(setting.AppVer)
 	if err = metadata.SaveTo(metaFile); err != nil {
 		log.Fatal(0, "Fail to save metadata '%s': %v", metaFile, err)
 	}
 
-	archiveName := path.Join(c.String("target"), fmt.Sprintf("gogs-backup-%d.zip", time.Now().Unix()))
+	archiveName := path.Join(c.String("target"), c.String("archive-name"))
 	log.Info("Packing backup files to: %s", archiveName)
 
 	z, err := zip.Create(archiveName)
@@ -98,7 +100,7 @@ func runBackup(c *cli.Context) error {
 
 	// Data files
 	if !c.Bool("database-only") {
-		for _, dir := range []string{"attachments", "avatars"} {
+		for _, dir := range []string{"attachments", "avatars", "repo-avatars"} {
 			dirPath := path.Join(setting.AppDataPath, dir)
 			if !com.IsDir(dirPath) {
 				continue
